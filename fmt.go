@@ -29,6 +29,7 @@ func main() {
 	promptFile := flag.String("prompt", "user.txt", "groq prompt file")
 	model := flag.String("model", "openai/gpt-oss-120b", "groq model")
 	config := flag.Bool("config", false, "prepare required files and exit")
+	stdin := flag.Bool("stdin", false, "read prompt from stdin")
 	flag.Parse()
 
 	if *config {
@@ -71,13 +72,20 @@ func main() {
 		return strings.TrimSpace(b.String()), nil
 	}())
 
-	prompt := must(func() (string, error) {
-		f := mustT(os.Open(*promptFile))
-		defer must0(f.Close)
+	var prompt string
+	if *stdin {
 		var b bytes.Buffer
-		mustT(io.Copy(&b, f))
-		return strings.TrimSpace(b.String()), nil
-	})
+		mustHaveInt64(io.Copy(&b, os.Stdin))
+		prompt = strings.TrimSpace(b.String())
+	} else {
+		prompt = mustHaveString(func() (string, error) {
+			f := mustHaveFile(os.Open(*promptFile))
+			defer mustDo(f.Close)
+			var b bytes.Buffer
+			mustHaveInt64(io.Copy(&b, f))
+			return strings.TrimSpace(b.String()), nil
+		}())
+	}
 
 	var out bytes.Buffer
 
