@@ -27,9 +27,11 @@ var (
 func main() {
 	keyFile := flag.String("key", "key.txt", "groq api key file")
 	promptFile := flag.String("prompt", "user.txt", "groq prompt file")
+	responseFile := flag.String("response", "response.txt", "response destination file")
 	model := flag.String("model", "openai/gpt-oss-120b", "groq model")
 	config := flag.Bool("config", false, "prepare required files and exit")
-	stdin := flag.Bool("stdin", false, "read prompt from stdin")
+	stdin := flag.Bool("stdin", false, "read prompt from stdin instead of prompt file")
+	stdout := flag.Bool("stdout", false, "print outpout to stdout instead of destination file")
 	flag.Parse()
 
 	if *config {
@@ -87,21 +89,29 @@ func main() {
 		}())
 	}
 
-	var out bytes.Buffer
-
+	var r r
 	{
-		f := mustHaveFile(os.Create("response.json"))
-		defer mustDo(f.Close)
+		var out bytes.Buffer
 
-		post(io.MultiWriter(&out, f), *model, prompt, key)
+		{
+			f := mustHaveFile(os.Create("response.json"))
+			defer mustDo(f.Close)
+
+			post(io.MultiWriter(&out, f), *model, prompt, key)
+		}
+
+		mustHandle(json.NewDecoder(&out).Decode(&r))
 	}
 
-	var r r
-	mustHandle(json.NewDecoder(&out).Decode(&r))
-
-	f := mustHaveFile(os.Create("response.txt"))
-	defer mustDo(f.Close)
-	mustHaveInt(f.WriteString(r.Choices[0].Message.Content))
+	var out io.Writer
+	if *stdout {
+		out = os.Stdout
+	} else {
+		f := mustHaveFile(os.Create(*responseFile))
+		defer mustDo(f.Close)
+		out = f
+	}
+	mustHaveInt(out.Write([]byte(r.Choices[0].Message.Content)))
 }
 
 func post(w io.Writer, model, prompt, key string) {
